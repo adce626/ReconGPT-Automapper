@@ -1,0 +1,80 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>ReconGPT Report - test.example</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            .header { background: #2c3e50; color: white; padding: 20px; }
+            .section { margin: 20px 0; }
+            .finding { border-left: 4px solid #3498db; padding-left: 15px; margin: 10px 0; }
+            .high-risk { border-left-color: #e74c3c; }
+            .medium-risk { border-left-color: #f39c12; }
+            .low-risk { border-left-color: #27ae60; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+            th { background-color: #f2f2f2; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>ReconGPT Automapper Report</h1>
+            <p>Target: test.example | Generated: 20250730_112636</p>
+        </div>
+        
+        <div class="section">
+            <h2>Summary</h2>
+            <p>Total Findings: 4</p>
+        </div>
+        
+        <div class="section">
+            <h2>Findings</h2>
+            <table>
+                <tr>
+                    <th>Tool</th>
+                    <th>Type</th>
+                    <th>Target</th>
+                    <th>Severity</th>
+                </tr>
+    
+                <tr class="">
+                    <td>amass</td>
+                    <td>subdomain</td>
+                    <td>test.example</td>
+                    <td>info</td>
+                </tr>
+        
+                <tr class="">
+                    <td>subfinder</td>
+                    <td>subdomain</td>
+                    <td>test.example</td>
+                    <td>info</td>
+                </tr>
+        
+                <tr class="low-risk">
+                    <td>httpx</td>
+                    <td>error</td>
+                    <td>test.example</td>
+                    <td>low</td>
+                </tr>
+        
+                <tr class="">
+                    <td>nuclei</td>
+                    <td>vulnerability</td>
+                    <td>test.example</td>
+                    <td>info</td>
+                </tr>
+        
+            </table>
+        </div>
+    
+        <div class="section">
+            <h2>AI Analysis</h2>
+            <p><strong>Priority Score:</strong> 0.00</p>
+            <p><strong>Confidence:</strong> 0.60</p>
+            <p><strong>Reasoning:</strong> Heuristic analysis based on 4 findings. 0 high-severity and 0 medium-severity issues identified.</p>
+        </div>
+        
+    </body>
+    </html>
+    

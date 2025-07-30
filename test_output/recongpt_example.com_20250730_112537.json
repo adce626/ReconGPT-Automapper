@@ -1,0 +1,77 @@
+{
+  "scan_info": {
+    "domain": "example.com",
+    "scan_id": 1,
+    "timestamp": "20250730_112537",
+    "total_findings": 4
+  },
+  "findings": [
+    {
+      "tool": "amass",
+      "type": "subdomain",
+      "target": "example.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "amass is not installed or not in PATH",
+        "target": "example.com",
+        "simulated": true
+      }
+    },
+    {
+      "tool": "subfinder",
+      "type": "subdomain",
+      "target": "example.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "subfinder is not installed or not in PATH",
+        "target": "example.com",
+        "simulated": true
+      }
+    },
+    {
+      "tool": "httpx",
+      "type": "error",
+      "target": "example.com",
+      "severity": "low",
+      "data": {
+        "error": "Usage: httpx [OPTIONS] URL\n\nError: No such option: -u\n",
+        "status": "failed"
+      }
+    },
+    {
+      "tool": "nuclei",
+      "type": "vulnerability",
+      "target": "example.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "nuclei is not installed or not in PATH",
+        "target": "example.com",
+        "simulated": true
+      }
+    }
+  ],
+  "ai_analysis": {
+    "overall_priority": 0.0,
+    "confidence": 0.6,
+    "reasoning": "Heuristic analysis based on 4 findings. 0 high-severity and 0 medium-severity issues identified.",
+    "recommendations": [
+      "Review 0 high-severity findings",
+      "Investigate 0 medium-severity findings",
+      "Prioritize targets with multiple vulnerabilities",
+      "Validate findings with manual testing"
+    ],
+    "high_priority_targets": [],
+    "attack_vectors": [
+      {
+        "vector": "High-Severity Vulnerabilities",
+        "likelihood": "medium",
+        "impact": "high",
+        "targets": []
+      }
+    ],
+    "summary": "Analysis of 4 reconnaissance findings completed. Focus on 0 high-severity issues for immediate attention."
+  }
+}

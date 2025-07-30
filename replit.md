@@ -2,11 +2,13 @@
 
 ## Overview
 
-ReconGPT is a cybersecurity reconnaissance tool that combines multiple reconnaissance tools (Amass, Subfinder, HTTPx, Nuclei) with AI-powered analysis using OpenAI's GPT-4o model. The application provides both a web interface and CLI for conducting security assessments, analyzing attack surfaces, and visualizing relationships between discovered assets through interactive graphs.
+ReconGPT Automapper is a professional CLI-based cybersecurity reconnaissance tool that combines multiple reconnaissance tools (Amass, Subfinder, HTTPx, Nuclei) with AI-powered analysis using OpenAI's GPT-4o model. The tool focuses on professional penetration testing workflows, providing intelligent attack surface analysis, target prioritization, and actionable security recommendations through a clean command-line interface.
 
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
+Tool preference: CLI-based tool for professional use, avoiding web interface complexity and security risks.
+Focus: Professional penetration testing workflows with direct tool integration.
 
 ## System Architecture
 
