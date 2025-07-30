@@ -1,0 +1,541 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-1">
+                    <i class="fas fa-chart-line me-2"></i>Security Reports Dashboard
+                </h4>
+                <p class="text-muted mb-0">
+                    Comprehensive analysis of reconnaissance findings and security metrics
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Total Scans</h6>
+                        <h3 class="mb-0">{{ scans|length }}</h3>
+                    </div>
+                    <i class="fas fa-search fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Total Findings</h6>
+                        <h3 class="mb-0">{{ total_findings }}</h3>
+                    </div>
+                    <i class="fas fa-eye fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">High Priority</h6>
+                        <h3 class="mb-0">{{ severity_stats.get('high', 0) + severity_stats.get('critical', 0) }}</h3>
+                    </div>
+                    <i class="fas fa-exclamation-triangle fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Success Rate</h6>
+                        <h3 class="mb-0">{{ ((scans|selectattr('status', 'equalto', 'completed')|list|length / scans|length * 100) if scans|length > 0 else 0)|round(0) }}%</h3>
+                    </div>
+                    <i class="fas fa-chart-pie fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mb-4">
+    <!-- Severity Distribution Chart -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-chart-pie me-2"></i>Findings by Severity
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="severityChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tools Usage Chart -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-chart-bar me-2"></i>Findings by Tool
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="toolsChart" width="400" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scan Timeline -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Scan Activity Timeline
+                </h6>
+            </div>
+            <div class="card-body">
+                <canvas id="timelineChart" width="800" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Scan Reports -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-list me-2"></i>Detailed Scan Reports
+                </h6>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary" onclick="filterScans('all')">All</button>
+                    <button type="button" class="btn btn-outline-success" onclick="filterScans('completed')">Completed</button>
+                    <button type="button" class="btn btn-outline-warning" onclick="filterScans('running')">Running</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="filterScans('failed')">Failed</button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if scans %}
+                <div class="table-responsive">
+                    <table class="table table-hover" id="scansTable">
+                        <thead>
+                            <tr>
+                                <th>Scan Name</th>
+                                <th>Target</th>
+                                <th>Status</th>
+                                <th>Findings</th>
+                                <th>Duration</th>
+                                <th>Created</th>
+                                <th>Risk Score</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for scan in scans %}
+                            <tr data-status="{{ scan.status }}">
+                                <td>
+                                    <strong>{{ scan.name }}</strong>
+                                </td>
+                                <td>
+                                    <code>{{ scan.target }}</code>
+                                </td>
+                                <td>
+                                    {% if scan.status == 'completed' %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check me-1"></i>Completed
+                                        </span>
+                                    {% elif scan.status == 'running' %}
+                                        <span class="badge bg-warning">
+                                            <i class="fas fa-spinner fa-spin me-1"></i>Running
+                                        </span>
+                                    {% elif scan.status == 'failed' %}
+                                        <span class="badge bg-danger">
+                                            <i class="fas fa-times me-1"></i>Failed
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-clock me-1"></i>{{ scan.status.title() }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ scan.findings_count }}</span>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {% if scan.status == 'completed' %}
+                                            ~{{ ((scan.created_at + timedelta(minutes=5)) - scan.created_at).seconds // 60 }} min
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </small>
+                                </td>
+                                <td>
+                                    <small class="text-muted">
+                                        {{ scan.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                    </small>
+                                </td>
+                                <td>
+                                    {% set risk_score = (scan.findings|selectattr('severity', 'in', ['high', 'critical'])|list|length * 0.8 + scan.findings|selectattr('severity', 'equalto', 'medium')|list|length * 0.4) / (scan.findings_count if scan.findings_count > 0 else 1) %}
+                                    {% if risk_score >= 0.7 %}
+                                        <span class="badge bg-danger">High</span>
+                                    {% elif risk_score >= 0.4 %}
+                                        <span class="badge bg-warning">Medium</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Low</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <a href="{{ url_for('scan_detail', scan_id=scan.id) }}" 
+                                           class="btn btn-outline-primary" title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        {% if scan.findings_count > 0 %}
+                                        <a href="{{ url_for('scan_graph', scan_id=scan.id) }}" 
+                                           class="btn btn-outline-info" title="View Graph">
+                                            <i class="fas fa-project-diagram"></i>
+                                        </a>
+                                        {% endif %}
+                                        <button class="btn btn-outline-success" 
+                                                onclick="exportScanReport({{ scan.id }})" title="Export Report">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No scan reports available</h5>
+                    <p class="text-muted">Run some reconnaissance scans to see detailed reports here.</p>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newScanModal">
+                        <i class="fas fa-plus me-2"></i>Start First Scan
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Risk Assessment Summary -->
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-shield-alt me-2"></i>Risk Assessment Summary
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if severity_stats %}
+                <div class="mb-3">
+                    <h6>Critical Findings</h6>
+                    <div class="progress mb-2" style="height: 25px;">
+                        {% set critical_pct = (severity_stats.get('critical', 0) / total_findings * 100) if total_findings > 0 else 0 %}
+                        <div class="progress-bar bg-danger" style="width: {{ critical_pct }}%">
+                            {{ severity_stats.get('critical', 0) }} ({{ critical_pct|round(1) }}%)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>High Priority Findings</h6>
+                    <div class="progress mb-2" style="height: 25px;">
+                        {% set high_pct = (severity_stats.get('high', 0) / total_findings * 100) if total_findings > 0 else 0 %}
+                        <div class="progress-bar bg-danger" style="width: {{ high_pct }}%">
+                            {{ severity_stats.get('high', 0) }} ({{ high_pct|round(1) }}%)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Medium Priority Findings</h6>
+                    <div class="progress mb-2" style="height: 25px;">
+                        {% set medium_pct = (severity_stats.get('medium', 0) / total_findings * 100) if total_findings > 0 else 0 %}
+                        <div class="progress-bar bg-warning" style="width: {{ medium_pct }}%">
+                            {{ severity_stats.get('medium', 0) }} ({{ medium_pct|round(1) }}%)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h6>Low Priority Findings</h6>
+                    <div class="progress mb-2" style="height: 25px;">
+                        {% set low_pct = (severity_stats.get('low', 0) / total_findings * 100) if total_findings > 0 else 0 %}
+                        <div class="progress-bar bg-success" style="width: {{ low_pct }}%">
+                            {{ severity_stats.get('low', 0) }} ({{ low_pct|round(1) }}%)
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-info-circle fa-2x text-muted mb-2"></i>
+                    <p class="text-muted mb-0">No risk assessment data available</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-tools me-2"></i>Tool Effectiveness
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if tool_stats %}
+                {% for tool, count in tool_stats.items() %}
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <h6 class="mb-0">
+                            <i class="fas fa-{% if tool == 'amass' %}sitemap{% elif tool == 'subfinder' %}search{% elif tool == 'httpx' %}globe{% elif tool == 'nuclei' %}bug{% else %}tool{% endif %} me-1"></i>
+                            {{ tool.title() }}
+                        </h6>
+                        <small class="text-muted">{{ count }} findings</small>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        {% set tool_pct = (count / total_findings * 100) if total_findings > 0 else 0 %}
+                        <div class="progress-bar bg-info" style="width: {{ tool_pct }}%">
+                            {{ tool_pct|round(1) }}%
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="fas fa-info-circle fa-2x text-muted mb-2"></i>
+                    <p class="text-muted mb-0">No tool effectiveness data available</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Chart data from backend
+const severityData = {{ severity_stats|tojson }};
+const toolData = {{ tool_stats|tojson }};
+const scansData = {{ scans|map(attribute='created_at')|map('string')|list|tojson }};
+
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeSeverityChart();
+    initializeToolsChart();
+    initializeTimelineChart();
+});
+
+function initializeSeverityChart() {
+    const ctx = document.getElementById('severityChart').getContext('2d');
+    
+    const labels = Object.keys(severityData);
+    const data = Object.values(severityData);
+    const colors = {
+        'critical': '#dc3545',
+        'high': '#fd7e14', 
+        'medium': '#ffc107',
+        'low': '#198754',
+        'info': '#0dcaf0'
+    };
+    
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+            datasets: [{
+                data: data,
+                backgroundColor: labels.map(l => colors[l] || '#6c757d'),
+                borderWidth: 2,
+                borderColor: '#495057'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#ffffff',
+                        padding: 20
+                    }
+                }
+            }
+        }
+    });
+}
+
+function initializeToolsChart() {
+    const ctx = document.getElementById('toolsChart').getContext('2d');
+    
+    const labels = Object.keys(toolData);
+    const data = Object.values(toolData);
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels.map(l => l.charAt(0).toUpperCase() + l.slice(1)),
+            datasets: [{
+                label: 'Findings',
+                data: data,
+                backgroundColor: '#0dcaf0',
+                borderColor: '#0aa2c0',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#ffffff'
+                    },
+                    grid: {
+                        color: '#495057'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#ffffff'
+                    },
+                    grid: {
+                        color: '#495057'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function initializeTimelineChart() {
+    const ctx = document.getElementById('timelineChart').getContext('2d');
+    
+    // Group scans by date
+    const scansByDate = {};
+    scansData.forEach(dateStr => {
+        const date = new Date(dateStr).toISOString().split('T')[0];
+        scansByDate[date] = (scansByDate[date] || 0) + 1;
+    });
+    
+    const labels = Object.keys(scansByDate).sort();
+    const data = labels.map(date => scansByDate[date]);
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Scans per Day',
+                data: data,
+                borderColor: '#0d6efd',
+                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#ffffff'
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#ffffff',
+                        stepSize: 1
+                    },
+                    grid: {
+                        color: '#495057'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#ffffff'
+                    },
+                    grid: {
+                        color: '#495057'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function filterScans(status) {
+    const table = document.getElementById('scansTable');
+    const rows = table.querySelectorAll('tbody tr');
+    
+    rows.forEach(row => {
+        if (status === 'all' || row.dataset.status === status) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Update button states
+    document.querySelectorAll('.btn-group button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+
+function exportScanReport(scanId) {
+    // Create a form and submit it to trigger download
+    const form = document.createElement('form');
+    form.method = 'GET';
+    form.action = `/api/scan/${scanId}/export`;
+    document.body.appendChild(form);
+    form.submit();
+    document.body.removeChild(form);
+}
+</script>
+{% endblock %}

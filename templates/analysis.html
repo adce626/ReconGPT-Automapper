@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Scan Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-1">
+                        <i class="fas fa-microscope me-2"></i>{{ scan.name }}
+                    </h4>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-crosshairs me-1"></i>Target: <code>{{ scan.target }}</code>
+                        <span class="ms-3">
+                            <i class="fas fa-calendar me-1"></i>{{ scan.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </span>
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <form method="POST" action="{{ url_for('analyze_scan', scan_id=scan.id) }}" class="d-inline">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-robot me-1"></i>AI Analysis
+                        </button>
+                    </form>
+                    {% if findings %}
+                    <a href="{{ url_for('scan_graph', scan_id=scan.id) }}" class="btn btn-info">
+                        <i class="fas fa-project-diagram me-1"></i>View Graph
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Total Findings</h6>
+                        <h3 class="mb-0">{{ findings|length }}</h3>
+                    </div>
+                    <i class="fas fa-list fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-danger">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Critical/High</h6>
+                        <h3 class="mb-0">{{ findings_by_severity.get('critical', 0) + findings_by_severity.get('high', 0) }}</h3>
+                    </div>
+                    <i class="fas fa-exclamation-triangle fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Medium</h6>
+                        <h3 class="mb-0">{{ findings_by_severity.get('medium', 0) }}</h3>
+                    </div>
+                    <i class="fas fa-exclamation fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Tools Used</h6>
+                        <h3 class="mb-0">{{ findings_by_tool.keys()|length }}</h3>
+                    </div>
+                    <i class="fas fa-tools fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Analysis Results -->
+{% set ai_analyses = scan.analyses %}
+{% if ai_analyses %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-robot me-2"></i>AI Analysis Results
+                </h5>
+            </div>
+            <div class="card-body">
+                {% for analysis in ai_analyses %}
+                <div class="mb-4">
+                    <!-- Priority Score -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <h6>Priority Score</h6>
+                            <div class="progress mb-2" style="height: 25px;">
+                                {% set priority_pct = (analysis.priority_score * 100)|round(1) %}
+                                {% if analysis.priority_score >= 0.7 %}
+                                    {% set priority_class = 'bg-danger' %}
+                                {% elif analysis.priority_score >= 0.4 %}
+                                    {% set priority_class = 'bg-warning' %}
+                                {% else %}
+                                    {% set priority_class = 'bg-success' %}
+                                {% endif %}
+                                <div class="progress-bar {{ priority_class }}" style="width: {{ priority_pct }}%">
+                                    {{ priority_pct }}%
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Confidence</h6>
+                            <div class="progress mb-2" style="height: 25px;">
+                                {% set conf_pct = (analysis.confidence * 100)|round(1) %}
+                                <div class="progress-bar bg-info" style="width: {{ conf_pct }}%">
+                                    {{ conf_pct }}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Reasoning -->
+                    {% if analysis.reasoning %}
+                    <div class="mb-3">
+                        <h6>Analysis Reasoning</h6>
+                        <div class="alert alert-info">
+                            <i class="fas fa-lightbulb me-2"></i>
+                            {{ analysis.reasoning }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- High Priority Targets -->
+                    {% set targets = analysis.get_targets_list() %}
+                    {% if targets %}
+                    <div class="mb-3">
+                        <h6>High Priority Targets</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Target</th>
+                                        <th>Priority Score</th>
+                                        <th>Risk Factors</th>
+                                        <th>Recommended Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for target in targets[:10] %}
+                                    <tr>
+                                        <td><code>{{ target.get('target', 'N/A') }}</code></td>
+                                        <td>
+                                            {% set score = target.get('priority_score', 0) %}
+                                            <span class="badge {% if score >= 0.7 %}bg-danger{% elif score >= 0.4 %}bg-warning{% else %}bg-success{% endif %}">
+                                                {{ (score * 100)|round(0) }}%
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% for factor in target.get('risk_factors', []) %}
+                                                <span class="badge bg-warning me-1">{{ factor }}</span>
+                                            {% endfor %}
+                                        </td>
+                                        <td>
+                                            <small>{{ target.get('recommended_actions', [])|join(', ') }}</small>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Recommendations -->
+                    {% set recommendations = analysis.get_recommendations_list() %}
+                    {% if recommendations %}
+                    <div class="mb-3">
+                        <h6>Recommendations</h6>
+                        <ul class="list-group">
+                            {% for rec in recommendations %}
+                            <li class="list-group-item d-flex align-items-center">
+                                <i class="fas fa-arrow-right me-2 text-primary"></i>
+                                {{ rec }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Findings by Tool -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-tools me-2"></i>Findings by Tool
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if findings_by_tool %}
+                <div class="row">
+                    {% for tool, tool_findings in findings_by_tool.items() %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-{% if tool == 'amass' %}sitemap{% elif tool == 'subfinder' %}search{% elif tool == 'httpx' %}globe{% elif tool == 'nuclei' %}bug{% else %}tool{% endif %} me-2"></i>
+                                    {{ tool.title() }}
+                                </h6>
+                                <span class="badge bg-primary">{{ tool_findings|length }}</span>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Target</th>
+                                                <th>Severity</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for finding in tool_findings[:10] %}
+                                            <tr>
+                                                <td>{{ finding.finding_type }}</td>
+                                                <td><small><code>{{ finding.target[:30] }}{{ '...' if finding.target|length > 30 else '' }}</code></small></td>
+                                                <td>
+                                                    {% if finding.severity %}
+                                                    <span class="badge {% if finding.severity == 'critical' %}bg-danger{% elif finding.severity == 'high' %}bg-danger{% elif finding.severity == 'medium' %}bg-warning{% elif finding.severity == 'low' %}bg-success{% else %}bg-info{% endif %}">
+                                                        {{ finding.severity }}
+                                                    </span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                            {% if tool_findings|length > 10 %}
+                                            <tr>
+                                                <td colspan="3" class="text-center text-muted">
+                                                    <small>... and {{ tool_findings|length - 10 }} more findings</small>
+                                                </td>
+                                            </tr>
+                                            {% endif %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-exclamation-circle fa-2x text-muted mb-3"></i>
+                    <h6 class="text-muted">No findings available</h6>
+                    <p class="text-muted">This scan hasn't produced any findings yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Findings -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-list-ul me-2"></i>Detailed Findings
+                </h5>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary" onclick="filterFindings('all')">All</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="filterFindings('critical')">Critical</button>
+                    <button type="button" class="btn btn-outline-danger" onclick="filterFindings('high')">High</button>
+                    <button type="button" class="btn btn-outline-warning" onclick="filterFindings('medium')">Medium</button>
+                    <button type="button" class="btn btn-outline-success" onclick="filterFindings('low')">Low</button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if findings %}
+                <div class="table-responsive">
+                    <table class="table table-hover" id="findingsTable">
+                        <thead>
+                            <tr>
+                                <th>Tool</th>
+                                <th>Type</th>
+                                <th>Target</th>
+                                <th>Severity</th>
+                                <th>Details</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for finding in findings %}
+                            <tr data-severity="{{ finding.severity or 'info' }}">
+                                <td>
+                                    <span class="badge bg-secondary">{{ finding.tool }}</span>
+                                </td>
+                                <td>{{ finding.finding_type }}</td>
+                                <td>
+                                    <code>{{ finding.target }}</code>
+                                </td>
+                                <td>
+                                    {% if finding.severity %}
+                                    <span class="badge {% if finding.severity == 'critical' %}bg-danger{% elif finding.severity == 'high' %}bg-danger{% elif finding.severity == 'medium' %}bg-warning{% elif finding.severity == 'low' %}bg-success{% else %}bg-info{% endif %}">
+                                        {{ finding.severity }}
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set data = finding.get_data_dict() %}
+                                    {% if finding.finding_type == 'http_service' %}
+                                        <small>
+                                            Status: {{ data.get('status_code', 'N/A') }}
+                                            {% if data.get('title') %}
+                                            <br>Title: {{ data.get('title')[:50] }}{{ '...' if data.get('title')|length > 50 else '' }}
+                                            {% endif %}
+                                        </small>
+                                    {% elif finding.finding_type == 'vulnerability' %}
+                                        <small>
+                                            {{ data.get('info', {}).get('name', 'Unknown vulnerability')[:50] }}
+                                        </small>
+                                    {% elif finding.finding_type == 'subdomain' %}
+                                        <small>Source: {{ data.get('source', finding.tool) }}</small>
+                                    {% else %}
+                                        <small>{{ finding.finding_type }} finding</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info" 
+                                            onclick="showFindingDetails({{ finding.id }}, '{{ finding.target }}', {{ data|tojson|e }})">
+                                        <i class="fas fa-info-circle"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No findings available</h5>
+                    <p class="text-muted">This scan hasn't produced any findings yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Finding Details Modal -->
+<div class="modal fade" id="findingDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Finding Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="findingDetailsContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterFindings(severity) {
+    const table = document.getElementById('findingsTable');
+    const rows = table.querySelectorAll('tbody tr');
+    
+    rows.forEach(row => {
+        if (severity === 'all' || row.dataset.severity === severity) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Update button states
+    document.querySelectorAll('.btn-group button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+
+function showFindingDetails(findingId, target, data) {
+    const modal = new bootstrap.Modal(document.getElementById('findingDetailsModal'));
+    const content = document.getElementById('findingDetailsContent');
+    
+    content.innerHTML = `
+        <h6>Target: <code>${target}</code></h6>
+        <h6>Raw Data:</h6>
+        <pre class="bg-dark text-light p-3 rounded"><code>${JSON.stringify(data, null, 2)}</code></pre>
+    `;
+    
+    modal.show();
+}
+</script>
+{% endblock %}

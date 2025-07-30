@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Scan Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-1">
+                        <i class="fas fa-project-diagram me-2"></i>Attack Surface Map: {{ scan.name }}
+                    </h4>
+                    <p class="text-muted mb-0">
+                        <i class="fas fa-crosshairs me-1"></i>Target: <code>{{ scan.target }}</code>
+                        <span class="ms-3">
+                            <i class="fas fa-calendar me-1"></i>{{ scan.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                        </span>
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('scan_detail', scan_id=scan.id) }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i>Back to Analysis
+                    </a>
+                    <button class="btn btn-primary" onclick="resetGraph()">
+                        <i class="fas fa-sync me-1"></i>Reset View
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graph Controls -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-sliders-h me-2"></i>Graph Controls
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-3">
+                        <label for="nodeFilter" class="form-label">Filter Nodes:</label>
+                        <select class="form-select form-select-sm" id="nodeFilter" onchange="filterNodes()">
+                            <option value="all">All Nodes</option>
+                            <option value="domain">Domains Only</option>
+                            <option value="subdomain">Subdomains Only</option>
+                            <option value="service">Services Only</option>
+                            <option value="vulnerability">Vulnerabilities Only</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="severityFilter" class="form-label">Severity Filter:</label>
+                        <select class="form-select form-select-sm" id="severityFilter" onchange="filterBySeverity()">
+                            <option value="all">All Severities</option>
+                            <option value="critical">Critical Only</option>
+                            <option value="high">High Only</option>
+                            <option value="medium">Medium Only</option>
+                            <option value="low">Low Only</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="layoutForce" class="form-label">Layout Force:</label>
+                        <input type="range" class="form-range" id="layoutForce" min="50" max="500" value="200" 
+                               onchange="updateForce(this.value)">
+                        <small class="text-muted">Strength: <span id="forceValue">200</span></small>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-info" onclick="toggleLabels()">
+                                <i class="fas fa-tag me-1"></i>Toggle Labels
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" onclick="exportGraph()">
+                                <i class="fas fa-download me-1"></i>Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graph Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Nodes</h6>
+                        <h4 class="mb-0" id="nodeCount">-</h4>
+                    </div>
+                    <i class="fas fa-circle fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Edges</h6>
+                        <h4 class="mb-0" id="edgeCount">-</h4>
+                    </div>
+                    <i class="fas fa-link fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Components</h6>
+                        <h4 class="mb-0" id="componentCount">-</h4>
+                    </div>
+                    <i class="fas fa-sitemap fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-title mb-0">Density</h6>
+                        <h4 class="mb-0" id="densityValue">-</h4>
+                    </div>
+                    <i class="fas fa-compress fa-2x opacity-75"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Graph Visualization -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-eye me-2"></i>Interactive Network Graph
+                </h6>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button type="button" class="btn btn-outline-primary" onclick="zoomIn()">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" onclick="zoomOut()">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="centerGraph()">
+                        <i class="fas fa-crosshairs"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="graph-container" style="height: 600px; width: 100%; overflow: hidden;">
+                    <svg id="graph-svg" width="100%" height="600"></svg>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Legend -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="fas fa-info-circle me-2"></i>Legend
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Node Types</h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="legend-node bg-primary me-2"></div>
+                                    <small>Domain</small>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="legend-node bg-success me-2"></div>
+                                    <small>Subdomain</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="legend-node bg-warning me-2"></div>
+                                    <small>Service</small>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="legend-node bg-danger me-2"></div>
+                                    <small>Vulnerability</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Severity Levels</h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-danger me-2">Critical</span>
+                                    <small>Immediate attention</small>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-warning me-2">Medium</span>
+                                    <small>Moderate risk</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-danger me-2">High</span>
+                                    <small>High priority</small>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <span class="badge bg-success me-2">Low</span>
+                                    <small>Low risk</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Interactions</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small><i class="fas fa-mouse me-1"></i><strong>Click:</strong> Select node</small>
+                            </div>
+                            <div class="col-md-4">
+                                <small><i class="fas fa-arrows-alt me-1"></i><strong>Drag:</strong> Move node</small>
+                            </div>
+                            <div class="col-md-4">
+                                <small><i class="fas fa-search me-1"></i><strong>Scroll:</strong> Zoom in/out</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Node Details Modal -->
+<div class="modal fade" id="nodeDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Node Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="nodeDetailsContent"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="highlightConnected()">Highlight Connected</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" 
+     style="background-color: rgba(0,0,0,0.7); z-index: 9999;">
+    <div class="card">
+        <div class="card-body text-center">
+            <div class="spinner-border text-primary mb-3" role="status"></div>
+            <h6>Loading Graph Data...</h6>
+            <p class="text-muted mb-0">Please wait while we build your attack surface map.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/graph.js') }}"></script>
+<script>
+// Initialize graph when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    const scanId = {{ scan.id }};
+    initializeGraph(scanId);
+});
+</script>
+{% endblock %}
