@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReconGPT Report - staging-api.example.com</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; color: #333; background: #f8f9fa; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { background: #2c3e50; color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.2em; opacity: 0.9; }
+        .section { background: white; margin: 20px 0; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .risk-high { border-left: 5px solid #e74c3c; }
+        .risk-medium { border-left: 5px solid #f39c12; }
+        .risk-low { border-left: 5px solid #27ae60; }
+        .target-list { list-style: none; }
+        .target-list li { padding: 10px; margin: 5px 0; background: #f8f9fa; border-radius: 4px; display: flex; justify-content: space-between; }
+        .target { font-family: 'Courier New', monospace; }
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: bold; }
+        .badge-high { background: #e74c3c; color: white; }
+        .badge-medium { background: #f39c12; color: white; }
+        .badge-low { background: #27ae60; color: white; }
+        .commands { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 4px; font-family: monospace; }
+        .commands h4 { color: #3498db; margin-bottom: 10px; }
+        .note { background: #3498db; color: white; padding: 15px; border-radius: 4px; margin: 10px 0; }
+        @media (max-width: 768px) { .container { padding: 10px; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>ReconGPT Automapper Report</h1>
+            <p>Target: staging-api.example.com | Generated: 20250730_114333 | Total Findings: 6</p>
+        </header>
+
+        <section class="section risk-high">
+            <h2>🔴 High Risk Targets (0)</h2>
+            <ul class="target-list">
+            </ul>
+            
+        </section>
+
+        <section class="section risk-medium">
+            <h2>🟡 Medium Risk Targets (0)</h2>
+            <ul class="target-list">
+            </ul>
+            
+        </section>
+        <section class="section">
+            <h2>🤖 AI Analysis Summary</h2>
+            <p><strong>Priority Score:</strong> 0.40/1.0</p>
+            <p><strong>Confidence:</strong> 0.60/1.0</p>
+            <p><strong>Reasoning:</strong> Heuristic analysis based on 6 findings. 0 high-severity and 0 medium-severity issues identified.</p>
+            
+            
+            
+            <h3>📋 AI Recommendations</h3>
+            <ul><li>Review 0 high-severity findings</li><li>Investigate 0 medium-severity findings</li><li>Prioritize targets with multiple vulnerabilities</li><li>Validate findings with manual testing</li>
+            </ul>
+        </section>
+        <section class="section">
+            <h2>🔧 Next Steps & Integration</h2>
+            <div class="note">
+                <strong>For Red Team / Bug Bounty:</strong> Focus on high-risk targets first. Use the commands below to integrate with your existing tools.
+            </div>
+            
+            <h3>Command Examples:</h3>
+            <div class="commands">
+                <h4>Scan high-priority targets with httpx:</h4>
+                <code>cat recongpt_staging-api.example.com_*.json | jq -r '.ai_analysis.high_priority_targets[]? | .target?' | httpx -silent</code>
+                
+                <h4>Run nuclei on all discovered subdomains:</h4>
+                <code>cat recongpt_staging-api.example.com_*.json | jq -r '.findings[] | select(.type=="subdomain") | .target' | nuclei -silent</code>
+                
+                <h4>Extract unusual ports for manual testing:</h4>
+                <code>cat recongpt_staging-api.example.com_*.json | jq -r '.findings[] | select(.data.port? and (.data.port != 80 and .data.port != 443)) | .target'</code>
+            </div>
+        </section>
+
+        <section class="section risk-low">
+            <h2>ℹ️ All Other Findings (6)</h2>
+            <ul class="target-list">
+                <li>
+                    <span class="target">staging-api.example.com</span>
+                    <span class="badge badge-low">amass - subdomain</span>
+                </li>
+                <li>
+                    <span class="target">staging-api.example.com</span>
+                    <span class="badge badge-low">subfinder - subdomain</span>
+                </li>
+                <li>
+                    <span class="target">staging-api.example.com</span>
+                    <span class="badge badge-low">httpx - error</span>
+                </li>
+                <li>
+                    <span class="target">staging-api.example.com</span>
+                    <span class="badge badge-low">nuclei - vulnerability</span>
+                </li>
+                <li>
+                    <span class="target">staging-api.example.com</span>
+                    <span class="badge badge-low">dnsx - dns</span>
+                </li>
+                <li>
+                    <span class="target">staging-api.example.com</span>
+                    <span class="badge badge-low">waybackurls - url</span>
+                </li>
+            </ul>
+            
+        </section>
+    </div>
+</body>
+</html>

@@ -111,17 +111,23 @@ class AIPrioritizer:
         SAMPLE FINDINGS:
         {json.dumps(findings_data['sample_findings'], indent=2)}
 
-        Please provide your analysis in the following JSON format:
+        CRITICAL REQUIREMENT: Provide SPECIFIC evidence and reasoning for every assessment.
+        
+        Please provide your analysis in the following JSON format with detailed evidence:
         {{
             "overall_priority": 0.8,
             "confidence": 0.9,
-            "reasoning": "Detailed explanation of the analysis and priority assessment",
+            "evidence_summary": "3 critical vulnerabilities found: admin panel on port 8080, missing security headers, exposed API endpoints",
+            "reasoning": "Detailed explanation with specific evidence from findings",
             "high_priority_targets": [
                 {{
-                    "target": "subdomain.example.com",
+                    "target": "admin.example.com",
                     "priority_score": 0.9,
-                    "risk_factors": ["open admin panel", "weak authentication"],
-                    "recommended_actions": ["Test for default credentials", "Check for vulnerabilities"]
+                    "evidence": "Admin panel accessible on port 8080 without authentication",
+                    "specific_ports": [8080],
+                    "security_headers": {{"missing": ["X-Frame-Options", "X-Content-Type-Options"]}},
+                    "risk_factors": ["open admin panel", "missing security headers"],
+                    "recommended_actions": ["Test default credentials on admin.example.com:8080", "Check for directory traversal"]
                 }}
             ],
             "recommendations": [
@@ -176,19 +182,47 @@ class AIPrioritizer:
             return self._mock_analysis(findings)
     
     def _mock_analysis(self, findings):
-        """Provide mock analysis when AI is not available"""
-        logging.info("Using mock AI analysis (OpenAI API not available)")
+        """Enhanced heuristic analysis when AI is not available with detailed evidence"""
+        logging.info("Using enhanced heuristic analysis (OpenAI API not available)")
         
-        # Basic heuristic analysis
+        # Detailed analysis counters
         high_severity_count = sum(1 for f in findings if f.severity in ['high', 'critical'])
         medium_severity_count = sum(1 for f in findings if f.severity == 'medium')
+        unusual_ports = []
+        admin_interfaces = []
+        api_endpoints = []
         
-        # Calculate basic priority score
+        # Analyze findings for specific patterns
+        for finding in findings:
+            # Check for unusual ports
+            if hasattr(finding, 'data') and finding.data:
+                if isinstance(finding.data, dict) and 'port' in finding.data:
+                    port = finding.data['port']
+                    if port not in [80, 443, 22, 21, 25, 53, 110, 143, 993, 995]:
+                        unusual_ports.append((finding.target, port))
+            
+            # Check for admin interfaces
+            if any(keyword in finding.target.lower() for keyword in ['admin', 'dev', 'test', 'staging', 'internal']):
+                admin_interfaces.append(finding.target)
+            
+            # Check for API endpoints
+            if 'api' in finding.target.lower() or finding.finding_type == 'api_endpoint':
+                api_endpoints.append(finding.target)
+        
+        # Calculate enhanced priority score
         total_findings = len(findings)
         if total_findings == 0:
             priority_score = 0.0
         else:
-            priority_score = (high_severity_count * 0.8 + medium_severity_count * 0.4) / total_findings
+            base_score = (high_severity_count * 0.8 + medium_severity_count * 0.4) / total_findings
+            bonus_score = 0.0
+            if unusual_ports:
+                bonus_score += 0.2
+            if admin_interfaces:
+                bonus_score += 0.3
+            if api_endpoints:
+                bonus_score += 0.1
+            priority_score = min(1.0, base_score + bonus_score)
         
         # Identify potential high-priority targets
         high_priority_targets = []
@@ -201,7 +235,34 @@ class AIPrioritizer:
                     'recommended_actions': [f"Investigate {finding.finding_type} on {finding.target}"]
                 })
         
-        # Generate basic recommendations
+        # Generate evidence-based recommendations
+        evidence_summary = []
+        if unusual_ports:
+            evidence_summary.append(f"{len(unusual_ports)} unusual ports detected: {', '.join([str(p[1]) for p in unusual_ports[:5]])}")
+        if admin_interfaces:
+            evidence_summary.append(f"{len(admin_interfaces)} admin/dev interfaces found")
+        if api_endpoints:
+            evidence_summary.append(f"{len(api_endpoints)} API endpoints discovered")
+        
+        # Create detailed high-priority targets with evidence
+        enhanced_high_priority_targets = []
+        for finding in findings:
+            if finding.severity in ['high', 'critical'] or finding.target in admin_interfaces:
+                evidence = []
+                if finding.target in admin_interfaces:
+                    evidence.append("Contains admin/dev/test keywords")
+                if hasattr(finding, 'data') and finding.data and isinstance(finding.data, dict):
+                    if 'port' in finding.data and finding.data['port'] not in [80, 443]:
+                        evidence.append(f"Unusual port: {finding.data['port']}")
+                
+                enhanced_high_priority_targets.append({
+                    'target': finding.target,
+                    'priority_score': 0.9 if finding.severity == 'critical' else 0.8,
+                    'evidence': '; '.join(evidence) if evidence else f"{finding.tool} identified {finding.finding_type}",
+                    'risk_factors': [finding.finding_type, finding.severity or 'unknown'],
+                    'recommended_actions': [f"Manual verification of {finding.finding_type}", f"Security testing on {finding.target}"]
+                })
+        
         recommendations = [
             f"Review {high_severity_count} high-severity findings",
             f"Investigate {medium_severity_count} medium-severity findings",
