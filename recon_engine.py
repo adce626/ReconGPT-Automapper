@@ -16,7 +16,9 @@ class ReconEngine:
             'amass': self._run_amass,
             'subfinder': self._run_subfinder,
             'httpx': self._run_httpx,
-            'nuclei': self._run_nuclei
+            'nuclei': self._run_nuclei,
+            'dnsx': self._run_dnsx,
+            'waybackurls': self._run_waybackurls
         }
     
     def run_scan(self, target, tools, scan_id):
@@ -210,6 +212,65 @@ class ReconEngine:
         db.session.add(finding)
         db.session.commit()
         return finding
+    
+    def _run_dnsx(self, target, scan_id):
+        """Run dnsx for DNS resolution and validation"""
+        findings = []
+        
+        try:
+            # Run dnsx command
+            cmd = [
+                'dnsx',
+                '-d', target,
+                '-json',
+                '-resp'
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            
+            if result.returncode == 0:
+                findings = self.parser.parse_dnsx_output(result.stdout, scan_id)
+            else:
+                logging.error(f"dnsx failed: {result.stderr}")
+                findings = [self._create_error_finding('dnsx', target, scan_id, result.stderr)]
+                
+        except subprocess.TimeoutExpired:
+            logging.error("dnsx timed out")
+            findings = [self._create_mock_finding('dnsx', 'dns', target, scan_id)]
+        except FileNotFoundError:
+            logging.error("dnsx not found in PATH")
+            findings = [self._create_mock_finding('dnsx', 'dns', target, scan_id)]
+        except Exception as e:
+            logging.error(f"dnsx execution failed: {str(e)}")
+            findings = [self._create_mock_finding('dnsx', 'dns', target, scan_id)]
+        
+        return findings
+    
+    def _run_waybackurls(self, target, scan_id):
+        """Run waybackurls for URL discovery from Wayback Machine"""
+        findings = []
+        
+        try:
+            # Run waybackurls command
+            cmd = ['waybackurls', target]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            
+            if result.returncode == 0:
+                findings = self.parser.parse_waybackurls_output(result.stdout, scan_id)
+            else:
+                logging.error(f"waybackurls failed: {result.stderr}")
+                findings = [self._create_error_finding('waybackurls', target, scan_id, result.stderr)]
+                
+        except subprocess.TimeoutExpired:
+            logging.error("waybackurls timed out")
+            findings = [self._create_mock_finding('waybackurls', 'url', target, scan_id)]
+        except FileNotFoundError:
+            logging.error("waybackurls not found in PATH")
+            findings = [self._create_mock_finding('waybackurls', 'url', target, scan_id)]
+        except Exception as e:
+            logging.error(f"waybackurls execution failed: {str(e)}")
+            findings = [self._create_mock_finding('waybackurls', 'url', target, scan_id)]
+        
+        return findings
     
     def get_available_tools(self):
         """Check which tools are available in the system"""

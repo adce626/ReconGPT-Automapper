@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import sqlite3
+import re
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -68,19 +69,23 @@ def main():
 @main.command()
 @click.argument('domain')
 @click.option('--tools', '-t', multiple=True, 
-              default=['amass', 'subfinder', 'httpx', 'nuclei'],
-              help='Recon tools to use (amass, subfinder, httpx, nuclei)')
+              default=['amass', 'subfinder', 'httpx', 'nuclei', 'dnsx', 'waybackurls'],
+              help='Recon tools to use (amass, subfinder, httpx, nuclei, dnsx, waybackurls)')
 @click.option('--output', '-o', help='Output directory for results')
 @click.option('--format', '-f', 
-              type=click.Choice(['json', 'html', 'txt']), 
+              type=click.Choice(['json', 'html']), 
               default='json',
-              help='Output format')
+              help='Output format (json for integration, html for reports)')
 @click.option('--analyze/--no-analyze', default=True,
               help='Run AI analysis (default: enabled)')
-@click.option('--interactive-map/--no-interactive-map', default=True,
-              help='Generate interactive attack surface map')
+@click.option('--ai-review-only', is_flag=True,
+              help='Run AI analysis for review only, don\'t apply results automatically')
+@click.option('--filter', 'filter_expr', 
+              help='Filter results (e.g., "port!=443 && domain~=\'dev|admin\'")')
+@click.option('--show-graphs/--no-graphs', default=False,
+              help='Generate optional graphs (disabled by default)')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
-def scan(domain, tools, output, format, analyze, interactive_map, verbose):
+def scan(domain, tools, output, format, analyze, ai_review_only, filter_expr, show_graphs, verbose):
     """
     Run comprehensive reconnaissance scan on target domain
     
@@ -91,11 +96,14 @@ def scan(domain, tools, output, format, analyze, interactive_map, verbose):
         logging.getLogger().setLevel(logging.DEBUG)
     
     # Display tool banner
+    ai_mode = "Review Only" if ai_review_only else ("Enabled" if analyze else "Disabled")
     console.print(Panel.fit(
         f"[bold blue]ReconGPT Automapper[/bold blue]\n"
         f"[white]Target: {domain}[/white]\n"
         f"[white]Tools: {', '.join(tools)}[/white]\n"
-        f"[white]AI Analysis: {'Enabled' if analyze else 'Disabled'}[/white]",
+        f"[white]AI Analysis: {ai_mode}[/white]\n"
+        f"[white]Filter: {filter_expr or 'None'}[/white]\n"
+        f"[white]Graphs: {'Enabled' if show_graphs else 'Disabled'}[/white]",
         border_style="blue"
     ))
     
@@ -148,6 +156,13 @@ def scan(domain, tools, output, format, analyze, interactive_map, verbose):
             console.print(f"[red]Scan failed: {e}[/red]")
             return
     
+    # Apply filtering if specified
+    if filter_expr:
+        console.print(f"\n[yellow]Applying filter: {filter_expr}[/yellow]")
+        filtered_findings = apply_filter(findings, filter_expr)
+        console.print(f"[green]Filtered from {len(findings)} to {len(filtered_findings)} findings[/green]")
+        findings = filtered_findings
+    
     # Display initial results
     display_scan_summary(findings, domain)
     
@@ -168,18 +183,22 @@ def scan(domain, tools, output, format, analyze, interactive_map, verbose):
                 ai_prioritizer = AIPrioritizer()
                 analysis_result = ai_prioritizer.analyze_findings(findings)
                 
-                # Store analysis results
-                analysis = AIAnalysis(
-                    scan_id=scan_record.id,
-                    analysis_type='prioritization',
-                    priority_score=analysis_result.get('overall_priority', 0.5),
-                    confidence=analysis_result.get('confidence', 0.5),
-                    reasoning=analysis_result.get('reasoning', ''),
-                    recommendations=analysis_result.get('recommendations', []),
-                    targets=analysis_result.get('high_priority_targets', [])
-                )
-                db.session.add(analysis)
-                db.session.commit()
+                # Enhanced AI analysis with SSRF/auth linking
+                analysis_result = enhance_analysis_with_linking(analysis_result, findings)
+                
+                # Store analysis results only if not review-only mode
+                if not ai_review_only:
+                    analysis = AIAnalysis(
+                        scan_id=scan_record.id,
+                        analysis_type='prioritization',
+                        priority_score=analysis_result.get('overall_priority', 0.5),
+                        confidence=analysis_result.get('confidence', 0.5),
+                        reasoning=analysis_result.get('reasoning', ''),
+                        recommendations=analysis_result.get('recommendations', []),
+                        targets=analysis_result.get('high_priority_targets', [])
+                    )
+                    db.session.add(analysis)
+                    db.session.commit()
                 
                 progress.update(ai_task, description="AI analysis completed")
                 
@@ -189,10 +208,10 @@ def scan(domain, tools, output, format, analyze, interactive_map, verbose):
     
     # Display AI analysis results
     if analysis_result:
-        display_ai_analysis(analysis_result, domain)
+        display_ai_analysis(analysis_result, domain, ai_review_only)
     
-    # Generate attack surface map if enabled
-    if interactive_map and findings:
+    # Generate attack surface map if enabled (optional)
+    if show_graphs and findings:
         console.print("\n[bold yellow]Generating attack surface map...[/bold yellow]")
         try:
             graph_builder = GraphBuilder()
@@ -208,6 +227,10 @@ def scan(domain, tools, output, format, analyze, interactive_map, verbose):
     
     # Display final summary
     display_final_summary(findings, analysis_result, domain)
+    
+    # Display integration examples for piping to other tools
+    if format == 'json' and output:
+        display_integration_examples(domain, output)
 
 def display_scan_summary(findings, domain):
     """Display summary of scan results"""
@@ -262,9 +285,150 @@ def display_scan_summary(findings, domain):
     
     console.print(severity_table)
 
-def display_ai_analysis(analysis_result, domain):
+def apply_filter(findings, filter_expr):
+    """Apply smart filtering to findings"""
+    filtered = []
+    
+    # Parse filter expression
+    # Support syntax like: port!=443 && domain~='dev|admin'
+    for finding in findings:
+        if evaluate_filter(finding, filter_expr):
+            filtered.append(finding)
+    
+    return filtered
+
+def evaluate_filter(finding, filter_expr):
+    """Evaluate filter expression against a finding"""
+    try:
+        # Extract data from finding
+        data = finding.get_data_dict()
+        domain = finding.target.lower()
+        port = None
+        has_https = False
+        
+        # Extract port if available
+        if 'port' in data:
+            port = data['port']
+        elif 'url' in data:
+            url = data['url']
+            if ':443' in url or url.startswith('https://'):
+                port = 443
+                has_https = True
+            elif ':80' in url or url.startswith('http://'):
+                port = 80
+            elif ':' in url:
+                try:
+                    port = int(url.split(':')[-1].split('/')[0])
+                except:
+                    pass
+        
+        # Simple filter evaluation
+        filter_expr = filter_expr.lower()
+        
+        # Check for unusual ports
+        if 'port!=' in filter_expr:
+            port_val = filter_expr.split('port!=')[1].split('&&')[0].split('||')[0].strip()
+            try:
+                port_val = int(port_val)
+                if port == port_val:
+                    return False
+            except:
+                pass
+        
+        # Check for no HTTPS
+        if 'https' in filter_expr and 'no' in filter_expr:
+            if has_https:
+                return False
+        
+        # Check for domain patterns
+        if 'domain~=' in filter_expr:
+            pattern_part = filter_expr.split('domain~=')[1].split('&&')[0].split('||')[0].strip().strip("'\"")
+            patterns = pattern_part.split('|')
+            
+            found_pattern = False
+            for pattern in patterns:
+                if pattern.strip() in domain:
+                    found_pattern = True
+                    break
+            
+            if not found_pattern:
+                return False
+        
+        # Check for keywords
+        keywords = ['admin', 'dev', 'test', 'internal', 'staging', 'api']
+        if any(keyword in filter_expr for keyword in keywords):
+            for keyword in keywords:
+                if keyword in filter_expr and keyword in domain:
+                    return True
+        
+        return True
+        
+    except Exception as e:
+        logger.debug(f"Filter evaluation failed: {e}")
+        return True  # Include by default if filter fails
+
+def enhance_analysis_with_linking(analysis_result, findings):
+    """Enhance AI analysis with SSRF and auth linking intelligence"""
+    if not analysis_result:
+        return analysis_result
+    
+    # Analyze domain relationships for SSRF/auth linking
+    domain_map = {}
+    auth_domains = []
+    api_domains = []
+    
+    for finding in findings:
+        domain = finding.target.lower()
+        data = finding.get_data_dict()
+        
+        # Group domains by base domain
+        base_domain = '.'.join(domain.split('.')[-2:]) if '.' in domain else domain
+        if base_domain not in domain_map:
+            domain_map[base_domain] = []
+        domain_map[base_domain].append(domain)
+        
+        # Identify auth and API domains
+        if any(keyword in domain for keyword in ['auth', 'login', 'sso', 'oauth']):
+            auth_domains.append(domain)
+        if any(keyword in domain for keyword in ['api', 'rest', 'graphql']):
+            api_domains.append(domain)
+    
+    # Generate linking insights
+    linking_insights = []
+    
+    for auth_domain in auth_domains:
+        for api_domain in api_domains:
+            if auth_domain != api_domain:
+                auth_base = '.'.join(auth_domain.split('.')[-2:])
+                api_base = '.'.join(api_domain.split('.')[-2:])
+                
+                if auth_base == api_base:
+                    linking_insights.append({
+                        'type': 'SSRF_Risk',
+                        'description': f'{api_domain} may access {auth_domain} - potential SSRF vector',
+                        'risk_level': 'high',
+                        'recommendation': f'Test SSRF on {api_domain} targeting {auth_domain}'
+                    })
+    
+    # Add linking insights to analysis
+    if linking_insights:
+        analysis_result['linking_insights'] = linking_insights
+        
+        # Update recommendations
+        recommendations = analysis_result.get('recommendations', [])
+        for insight in linking_insights:
+            recommendations.append(insight['recommendation'])
+        analysis_result['recommendations'] = recommendations
+    
+    return analysis_result
+
+def display_ai_analysis(analysis_result, domain, review_only=False):
     """Display AI analysis results"""
-    console.print(f"\n[bold blue]AI Intelligence Report for {domain}[/bold blue]")
+    review_mode_text = " (Review Mode - Not Applied)" if review_only else ""
+    console.print(f"\n[bold blue]AI Intelligence Report for {domain}{review_mode_text}[/bold blue]")
+    
+    if review_only:
+        console.print("[yellow]⚠️  Review Mode: AI suggestions below are for review only and have not been applied[/yellow]")
     
     # Priority score
     priority = analysis_result.get('overall_priority', 0)
@@ -277,6 +441,14 @@ def display_ai_analysis(analysis_result, domain):
     if analysis_result.get('reasoning'):
         console.print(f"\n[bold]Analysis Reasoning:[/bold]")
         console.print(Panel(analysis_result['reasoning'], border_style="blue"))
+    
+    # Linking insights (new intelligence feature)
+    linking_insights = analysis_result.get('linking_insights', [])
+    if linking_insights:
+        console.print(f"\n[bold magenta]🔗 Domain Linking Intelligence:[/bold magenta]")
+        for insight in linking_insights:
+            risk_color = {'high': 'red', 'medium': 'yellow', 'low': 'green'}.get(insight['risk_level'], 'white')
+            console.print(f"[{risk_color}]● {insight['type']}:[/{risk_color}] {insight['description']}")
     
     # High priority targets
     high_priority = analysis_result.get('high_priority_targets', [])
@@ -301,11 +473,14 @@ def display_ai_analysis(analysis_result, domain):
     recommendations = analysis_result.get('recommendations', [])
     if recommendations:
         console.print(f"\n[bold green]AI Recommendations:[/bold green]")
-        for i, rec in enumerate(recommendations[:5], 1):  # Show top 5
+        for i, rec in enumerate(recommendations[:8], 1):  # Show top 8
             if isinstance(rec, dict):
                 console.print(f"{i}. [yellow]{rec.get('action', rec)}[/yellow]")
             else:
                 console.print(f"{i}. [yellow]{rec}[/yellow]")
+    
+    if review_only:
+        console.print(f"\n[bold cyan]💡 To apply AI analysis automatically, run without --ai-review-only flag[/bold cyan]")
 
 def display_attack_surface_map(nodes, edges, domain):
     """Display text-based attack surface map"""
@@ -393,90 +568,176 @@ def generate_outputs(findings, analysis_result, domain, output_dir, format, scan
         generate_html_report(findings, analysis_result, domain, html_file, timestamp)
         console.print(f"[green]HTML report saved to: {html_file}[/green]")
     
-    elif format == 'txt':
-        # Text output
-        txt_file = os.path.join(output_dir, f"{base_filename}.txt")
-        generate_text_report(findings, analysis_result, domain, txt_file, timestamp)
-        console.print(f"[green]Text report saved to: {txt_file}[/green]")
+def display_integration_examples(domain, output_dir):
+    """Display examples for integrating with other tools"""
+    console.print(f"\n[bold cyan]🔧 Integration Examples:[/bold cyan]")
+    
+    latest_json = f"{output_dir}/recongpt_{domain}*.json"
+    
+    examples = [
+        f"# Extract high-priority targets for httpx scanning:",
+        f"cat {latest_json} | jq -r '.ai_analysis.high_priority_targets[]? | .target?' | httpx -silent",
+        f"",
+        f"# Extract all subdomains for nuclei scanning:",
+        f"cat {latest_json} | jq -r '.findings[] | select(.type==\"subdomain\") | .target' | nuclei -silent",
+        f"",
+        f"# Extract URLs with unusual ports:",
+        f"cat {latest_json} | jq -r '.findings[] | select(.data.port? and (.data.port != 80 and .data.port != 443)) | .target'",
+        f"",
+        f"# Extract domains containing dev/admin/test keywords:",
+        f"cat {latest_json} | jq -r '.findings[] | select(.target | test(\"dev|admin|test|staging\")) | .target'",
+        f"",
+        f"# Generate custom wordlist from discovered patterns:",
+        f"cat {latest_json} | jq -r '.findings[].target' | cut -d'.' -f1 | sort -u > custom_wordlist.txt"
+    ]
+    
+    for example in examples:
+        if example.startswith('#'):
+            console.print(f"[bold yellow]{example}[/bold yellow]")
+        elif example == "":
+            console.print("")
+        else:
+            console.print(f"[green]{example}[/green]")
 
 def generate_html_report(findings, analysis_result, domain, filename, timestamp):
-    """Generate HTML report"""
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>ReconGPT Report - {domain}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 40px; }}
-            .header {{ background: #2c3e50; color: white; padding: 20px; }}
-            .section {{ margin: 20px 0; }}
-            .finding {{ border-left: 4px solid #3498db; padding-left: 15px; margin: 10px 0; }}
-            .high-risk {{ border-left-color: #e74c3c; }}
-            .medium-risk {{ border-left-color: #f39c12; }}
-            .low-risk {{ border-left-color: #27ae60; }}
-            table {{ width: 100%; border-collapse: collapse; }}
-            th, td {{ padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }}
-            th {{ background-color: #f2f2f2; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
+    """Generate clean, lightweight HTML report"""
+    
+    # Group findings by risk level
+    high_risk = [f for f in findings if f.severity in ['critical', 'high']]
+    medium_risk = [f for f in findings if f.severity == 'medium']
+    low_risk = [f for f in findings if f.severity in ['low', 'info']]
+    
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReconGPT Report - {domain}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.6; color: #333; background: #f8f9fa; }}
+        .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: #2c3e50; color: white; padding: 30px; border-radius: 8px; margin-bottom: 30px; }}
+        .header h1 {{ font-size: 2.5em; margin-bottom: 10px; }}
+        .header p {{ font-size: 1.2em; opacity: 0.9; }}
+        .section {{ background: white; margin: 20px 0; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }}
+        .risk-high {{ border-left: 5px solid #e74c3c; }}
+        .risk-medium {{ border-left: 5px solid #f39c12; }}
+        .risk-low {{ border-left: 5px solid #27ae60; }}
+        .target-list {{ list-style: none; }}
+        .target-list li {{ padding: 10px; margin: 5px 0; background: #f8f9fa; border-radius: 4px; display: flex; justify-content: space-between; }}
+        .target {{ font-family: 'Courier New', monospace; }}
+        .badge {{ padding: 4px 12px; border-radius: 20px; font-size: 0.8em; font-weight: bold; }}
+        .badge-high {{ background: #e74c3c; color: white; }}
+        .badge-medium {{ background: #f39c12; color: white; }}
+        .badge-low {{ background: #27ae60; color: white; }}
+        .commands {{ background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 4px; font-family: monospace; }}
+        .commands h4 {{ color: #3498db; margin-bottom: 10px; }}
+        .note {{ background: #3498db; color: white; padding: 15px; border-radius: 4px; margin: 10px 0; }}
+        @media (max-width: 768px) {{ .container {{ padding: 10px; }} }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
             <h1>ReconGPT Automapper Report</h1>
-            <p>Target: {domain} | Generated: {timestamp}</p>
-        </div>
-        
-        <div class="section">
-            <h2>Summary</h2>
-            <p>Total Findings: {len(findings)}</p>
-        </div>
-        
-        <div class="section">
-            <h2>Findings</h2>
-            <table>
-                <tr>
-                    <th>Tool</th>
-                    <th>Type</th>
-                    <th>Target</th>
-                    <th>Severity</th>
-                </tr>
-    """
+            <p>Target: {domain} | Generated: {timestamp} | Total Findings: {len(findings)}</p>
+        </header>
+
+        <section class="section risk-high">
+            <h2>🔴 High Risk Targets ({len(high_risk)})</h2>
+            <ul class="target-list">"""
     
-    for finding in findings:
-        severity_class = {
-            'critical': 'high-risk',
-            'high': 'high-risk',
-            'medium': 'medium-risk',
-            'low': 'low-risk'
-        }.get(finding.severity, '')
-        
+    for finding in high_risk[:20]:  # Limit display
         html_content += f"""
-                <tr class="{severity_class}">
-                    <td>{finding.tool}</td>
-                    <td>{finding.finding_type}</td>
-                    <td>{finding.target}</td>
-                    <td>{finding.severity or 'info'}</td>
-                </tr>
-        """
+                <li>
+                    <span class="target">{finding.target}</span>
+                    <span class="badge badge-high">{finding.tool} - {finding.finding_type}</span>
+                </li>"""
     
-    html_content += """
-            </table>
-        </div>
-    """
+    html_content += f"""
+            </ul>
+            {f'<p>... and {len(high_risk) - 20} more</p>' if len(high_risk) > 20 else ''}
+        </section>
+
+        <section class="section risk-medium">
+            <h2>🟡 Medium Risk Targets ({len(medium_risk)})</h2>
+            <ul class="target-list">"""
+    
+    for finding in medium_risk[:15]:
+        html_content += f"""
+                <li>
+                    <span class="target">{finding.target}</span>
+                    <span class="badge badge-medium">{finding.tool} - {finding.finding_type}</span>
+                </li>"""
+    
+    html_content += f"""
+            </ul>
+            {f'<p>... and {len(medium_risk) - 15} more</p>' if len(medium_risk) > 15 else ''}
+        </section>"""
     
     if analysis_result:
+        linking_insights = analysis_result.get('linking_insights', [])
+        recommendations = analysis_result.get('recommendations', [])
+        
         html_content += f"""
-        <div class="section">
-            <h2>AI Analysis</h2>
-            <p><strong>Priority Score:</strong> {analysis_result.get('overall_priority', 0):.2f}</p>
-            <p><strong>Confidence:</strong> {analysis_result.get('confidence', 0):.2f}</p>
+        <section class="section">
+            <h2>🤖 AI Analysis Summary</h2>
+            <p><strong>Priority Score:</strong> {analysis_result.get('overall_priority', 0):.2f}/1.0</p>
+            <p><strong>Confidence:</strong> {analysis_result.get('confidence', 0):.2f}/1.0</p>
             <p><strong>Reasoning:</strong> {analysis_result.get('reasoning', 'No reasoning provided')}</p>
-        </div>
-        """
+            
+            {f'''<h3>🔗 Domain Linking Intelligence</h3>
+            <ul>''' + ''.join([f'<li><strong>{insight["type"]}:</strong> {insight["description"]}</li>' for insight in linking_insights]) + '</ul>' if linking_insights else ''}
+            
+            <h3>📋 AI Recommendations</h3>
+            <ul>"""
+        
+        for rec in recommendations[:8]:
+            html_content += f"<li>{rec}</li>"
+        
+        html_content += """
+            </ul>
+        </section>"""
     
-    html_content += """
-    </body>
-    </html>
-    """
+    html_content += f"""
+        <section class="section">
+            <h2>🔧 Next Steps & Integration</h2>
+            <div class="note">
+                <strong>For Red Team / Bug Bounty:</strong> Focus on high-risk targets first. Use the commands below to integrate with your existing tools.
+            </div>
+            
+            <h3>Command Examples:</h3>
+            <div class="commands">
+                <h4>Scan high-priority targets with httpx:</h4>
+                <code>cat recongpt_{domain}_*.json | jq -r '.ai_analysis.high_priority_targets[]? | .target?' | httpx -silent</code>
+                
+                <h4>Run nuclei on all discovered subdomains:</h4>
+                <code>cat recongpt_{domain}_*.json | jq -r '.findings[] | select(.type=="subdomain") | .target' | nuclei -silent</code>
+                
+                <h4>Extract unusual ports for manual testing:</h4>
+                <code>cat recongpt_{domain}_*.json | jq -r '.findings[] | select(.data.port? and (.data.port != 80 and .data.port != 443)) | .target'</code>
+            </div>
+        </section>
+
+        <section class="section risk-low">
+            <h2>ℹ️ All Other Findings ({len(low_risk)})</h2>
+            <ul class="target-list">"""
+    
+    for finding in low_risk[:10]:
+        html_content += f"""
+                <li>
+                    <span class="target">{finding.target}</span>
+                    <span class="badge badge-low">{finding.tool} - {finding.finding_type}</span>
+                </li>"""
+    
+    html_content += f"""
+            </ul>
+            {f'<p>... and {len(low_risk) - 10} more (see JSON output for complete list)</p>' if len(low_risk) > 10 else ''}
+        </section>
+    </div>
+</body>
+</html>"""
     
     with open(filename, 'w') as f:
         f.write(html_content)

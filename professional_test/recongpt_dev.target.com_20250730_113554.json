@@ -1,0 +1,101 @@
+{
+  "scan_info": {
+    "domain": "dev.target.com",
+    "scan_id": 4,
+    "timestamp": "20250730_113554",
+    "total_findings": 6
+  },
+  "findings": [
+    {
+      "tool": "amass",
+      "type": "subdomain",
+      "target": "dev.target.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "amass is not installed or not in PATH",
+        "target": "dev.target.com",
+        "simulated": true
+      }
+    },
+    {
+      "tool": "subfinder",
+      "type": "subdomain",
+      "target": "dev.target.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "subfinder is not installed or not in PATH",
+        "target": "dev.target.com",
+        "simulated": true
+      }
+    },
+    {
+      "tool": "httpx",
+      "type": "error",
+      "target": "dev.target.com",
+      "severity": "low",
+      "data": {
+        "error": "Usage: httpx [OPTIONS] URL\n\nError: No such option: -u\n",
+        "status": "failed"
+      }
+    },
+    {
+      "tool": "nuclei",
+      "type": "vulnerability",
+      "target": "dev.target.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "nuclei is not installed or not in PATH",
+        "target": "dev.target.com",
+        "simulated": true
+      }
+    },
+    {
+      "tool": "dnsx",
+      "type": "dns",
+      "target": "dev.target.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "dnsx is not installed or not in PATH",
+        "target": "dev.target.com",
+        "simulated": true
+      }
+    },
+    {
+      "tool": "waybackurls",
+      "type": "url",
+      "target": "dev.target.com",
+      "severity": "info",
+      "data": {
+        "status": "tool_not_available",
+        "message": "waybackurls is not installed or not in PATH",
+        "target": "dev.target.com",
+        "simulated": true
+      }
+    }
+  ],
+  "ai_analysis": {
+    "overall_priority": 0.0,
+    "confidence": 0.6,
+    "reasoning": "Heuristic analysis based on 6 findings. 0 high-severity and 0 medium-severity issues identified.",
+    "recommendations": [
+      "Review 0 high-severity findings",
+      "Investigate 0 medium-severity findings",
+      "Prioritize targets with multiple vulnerabilities",
+      "Validate findings with manual testing"
+    ],
+    "high_priority_targets": [],
+    "attack_vectors": [
+      {
+        "vector": "High-Severity Vulnerabilities",
+        "likelihood": "medium",
+        "impact": "high",
+        "targets": []
+      }
+    ],
+    "summary": "Analysis of 6 reconnaissance findings completed. Focus on 0 high-severity issues for immediate attention."
+  }
+}

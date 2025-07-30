@@ -9,6 +9,11 @@ ReconGPT Automapper is a professional CLI-based cybersecurity reconnaissance too
 Preferred communication style: Simple, everyday language.
 Tool preference: CLI-based tool for professional use, avoiding web interface complexity and security risks.
 Focus: Professional penetration testing workflows with direct tool integration.
+Interface requirements: Minimize reliance on complex GUIs, focus on excellent CLI experience with clear outputs (HTML and JSON only).
+AI role: AI as assistant, not controller - let it suggest, classify, and recommend but users must have option to review/modify analysis.
+Filtering: Smart filtering for results with unusual ports, no HTTPS, keywords like admin/dev/test/internal.
+Integration: Easy integration with other tools, pipeable JSON outputs for httpx, nuclei, custom scripts.
+Reports: Clean, lightweight HTML reports without excessive graphics or heavy JavaScript.
 
 ## System Architecture
 

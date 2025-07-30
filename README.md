@@ -67,23 +67,31 @@ export OPENAI_API_KEY="your-api-key-here"
 python recongpt.py scan target.com
 ```
 
-### Advanced Options
+### Professional Red Team / Bug Bounty Examples
 
 ```bash
-# Full scan with all tools and custom output
+# Review AI analysis without applying automatically (professional workflow)
+python recongpt.py scan target.com --ai-review-only --format html
+
+# Filter for high-value targets (dev/admin/test domains)
+python recongpt.py scan target.com --filter "domain~='dev|admin|test|staging'"
+
+# Focus on unusual ports (not 80/443)
+python recongpt.py scan target.com --filter "port!=443 && port!=80"
+
+# Extended tool set for comprehensive reconnaissance
 python recongpt.py scan target.com \
-    --tools amass subfinder httpx nuclei \
+    --tools amass subfinder httpx nuclei dnsx waybackurls \
     --output ./results \
     --format json \
-    --analyze \
-    --interactive-map \
+    --ai-review-only \
     --verbose
 
-# Quick scan without AI analysis
-python recongpt.py scan target.com --no-analyze --format txt
-
-# HTML report generation
+# Clean, professional HTML reports
 python recongpt.py scan target.com --format html --output ./reports
+
+# Integration-ready JSON output
+python recongpt.py scan target.com --format json --output ./integration
 ```
 
 ### List Previous Scans
@@ -100,12 +108,21 @@ python recongpt.py list --scan-id 1
 
 ### `scan` command:
 - `DOMAIN` - Target domain to scan
-- `--tools` - Specify tools to use (default: amass, subfinder, httpx, nuclei)
+- `--tools` - Specify tools to use (default: amass, subfinder, httpx, nuclei, dnsx, waybackurls)
 - `--output` - Output directory for results  
-- `--format` - Output format: json, html, txt (default: json)
+- `--format` - Output format: json, html (optimized for integration and reporting)
 - `--analyze/--no-analyze` - Enable/disable AI analysis (default: enabled)
-- `--interactive-map/--no-interactive-map` - Generate attack surface map (default: enabled)
+- `--ai-review-only` - **NEW**: Run AI analysis for review only, don't apply automatically
+- `--filter` - **NEW**: Smart filtering with syntax like `"port!=443 && domain~='dev|admin'"`
+- `--show-graphs/--no-graphs` - Optional graph generation (disabled by default for CLI focus)
 - `--verbose` - Enable verbose output
+
+### Professional Filtering Examples:
+```bash
+--filter "domain~='dev|admin|test|staging'"    # High-value keywords
+--filter "port!=443 && port!=80"               # Unusual ports only  
+--filter "domain~='api' && port!=443"          # API endpoints without HTTPS
+```
 
 ## Example Workflow
 
@@ -169,14 +186,40 @@ python recongpt.py scan target.com --format html --output ./reports
    - Test identified vulnerability patterns
    - Investigate suspicious subdomain relationships
 
-## Tool Integration
+## Professional Integration Features
 
-ReconGPT Automapper is designed for professional penetration testing workflows:
+### Smart AI Assistant (Not Controller)
+- **Review Mode**: `--ai-review-only` lets you review AI suggestions before applying
+- **Intelligent Linking**: Detects SSRF risks between API and auth domains
+- **Pattern Recognition**: Identifies suspicious keywords and port configurations
+- **Confidence Scoring**: Provides confidence levels with all recommendations
 
-- **CLI-based**: No web interface complexity or security risks
-- **Scriptable**: Easy integration with existing testing pipelines  
-- **Output formats**: JSON for automation, HTML for reporting, TXT for documentation
-- **Graceful degradation**: Works even when external tools are unavailable
+### Advanced Filtering System
+```bash
+# Examples of professional filtering
+--filter "domain~='dev|admin|test'"           # Development/admin interfaces
+--filter "port!=443 && domain~='api'"         # Unencrypted API endpoints
+--filter "domain~='staging|internal'"         # Internal staging environments
+```
+
+### Integration Examples (Displayed after each scan)
+```bash
+# Pipe high-priority targets to httpx
+cat output.json | jq -r '.ai_analysis.high_priority_targets[]? | .target?' | httpx -silent
+
+# Extract subdomains for nuclei scanning
+cat output.json | jq -r '.findings[] | select(.type=="subdomain") | .target' | nuclei -silent
+
+# Generate custom wordlists from patterns
+cat output.json | jq -r '.findings[].target' | cut -d'.' -f1 | sort -u > wordlist.txt
+```
+
+### Tool Advantages for Red Team / Bug Bounty
+- **CLI-focused**: No web interface security risks, perfect for headless environments
+- **Lightweight HTML**: Clean reports without heavy JavaScript or graphics
+- **Extended tool support**: amass, subfinder, httpx, nuclei, dnsx, waybackurls
+- **Smart prioritization**: AI identifies unusual ports, suspicious patterns, potential SSRF
+- **Integration-ready**: JSON output designed for piping to other tools
 
 ## Requirements
 

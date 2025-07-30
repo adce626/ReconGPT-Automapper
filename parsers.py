@@ -236,3 +236,62 @@ class ReconParser:
         except Exception as e:
             logging.error(f"Error creating finding from dict: {str(e)}")
             return None
+    
+    def parse_dnsx_output(self, output, scan_id):
+        """Parse dnsx JSON output"""
+        findings = []
+        
+        try:
+            for line in output.strip().split('\n'):
+                if not line.strip():
+                    continue
+                
+                try:
+                    data = json.loads(line)
+                    finding = Finding(
+                        scan_id=scan_id,
+                        tool='dnsx',
+                        finding_type='dns_record',
+                        target=data.get('host', ''),
+                        data=data,
+                        severity='info'
+                    )
+                    db.session.add(finding)
+                    findings.append(finding)
+                except json.JSONDecodeError:
+                    continue
+            
+            db.session.commit()
+            
+        except Exception as e:
+            logging.error(f"Error parsing dnsx output: {str(e)}")
+        
+        return findings
+    
+    def parse_waybackurls_output(self, output, scan_id):
+        """Parse waybackurls text output"""
+        findings = []
+        
+        try:
+            urls = output.strip().split('\n')
+            for url in urls:
+                if not url.strip():
+                    continue
+                
+                finding = Finding(
+                    scan_id=scan_id,
+                    tool='waybackurls',
+                    finding_type='archived_url',
+                    target=url.strip(),
+                    data={'url': url.strip(), 'source': 'wayback_machine'},
+                    severity='info'
+                )
+                db.session.add(finding)
+                findings.append(finding)
+            
+            db.session.commit()
+            
+        except Exception as e:
+            logging.error(f"Error parsing waybackurls output: {str(e)}")
+        
+        return findings
